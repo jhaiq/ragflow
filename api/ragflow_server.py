@@ -15,6 +15,16 @@
 #
 
 import logging
+from api.utils.log_utils import initRootLogger
+initRootLogger("ragflow_server")
+for module in ["pdfminer"]:
+    module_logger = logging.getLogger(module)
+    module_logger.setLevel(logging.WARNING)
+for module in ["peewee"]:
+    module_logger = logging.getLogger(module)
+    module_logger.handlers.clear()
+    module_logger.propagate = True
+
 import os
 import signal
 import sys
