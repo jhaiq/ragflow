@@ -15,7 +15,10 @@
 #
 import logging
 import sys
+import sys
 from api.utils.log_utils import initRootLogger
+CONSUMER_NO = "0" if len(sys.argv) < 2 else sys.argv[1]
+initRootLogger(f"task_executor_{CONSUMER_NO}")
 CONSUMER_NO = "0" if len(sys.argv) < 2 else sys.argv[1]
 initRootLogger(f"task_executor_{CONSUMER_NO}")
 for module in ["pdfminer"]:
@@ -27,6 +30,7 @@ for module in ["peewee"]:
     module_logger.propagate = True
 
 from datetime import datetime
+from datetime import datetime
 import json
 import logging
 import os
@@ -35,6 +39,7 @@ import copy
 import re
 import sys
 import time
+import threading
 import threading
 from functools import partial
 from io import BytesIO
@@ -85,7 +90,14 @@ FACTORY = {
 }
 
 CONSUMER_NAME = "task_consumer_" + CONSUMER_NO
+CONSUMER_NAME = "task_consumer_" + CONSUMER_NO
 PAYLOAD: Payload | None = None
+BOOT_AT = datetime.now().isoformat()
+DONE_TASKS = 0
+RETRY_TASKS = 0
+PENDING_TASKS = 0
+HEAD_CREATED_AT = ""
+HEAD_DETAIL = ""
 BOOT_AT = datetime.now().isoformat()
 DONE_TASKS = 0
 RETRY_TASKS = 0
@@ -216,6 +228,8 @@ def build(row):
         d["id"] = md5.hexdigest()
         d["create_time"] = str(datetime.now()).replace("T", " ")[:19]
         d["create_timestamp_flt"] = datetime.now().timestamp()
+        d["create_time"] = str(datetime.now()).replace("T", " ")[:19]
+        d["create_timestamp_flt"] = datetime.now().timestamp()
         if not d.get("image"):
             docs.append(d)
             continue
@@ -343,6 +357,8 @@ def run_raptor(row, chat_mdl, embd_mdl, callback=None):
         d["id"] = md5.hexdigest()
         d["create_time"] = str(datetime.now()).replace("T", " ")[:19]
         d["create_timestamp_flt"] = datetime.now().timestamp()
+        d["create_time"] = str(datetime.now()).replace("T", " ")[:19]
+        d["create_timestamp_flt"] = datetime.now().timestamp()
         d[vctr_nm] = vctr.tolist()
         d["content_with_weight"] = content
         d["content_ltks"] = rag_tokenizer.tokenize(content)
@@ -430,8 +446,35 @@ def main():
 def report_status():
     global CONSUMER_NAME, BOOT_AT, DONE_TASKS, RETRY_TASKS, PENDING_TASKS, HEAD_CREATED_AT, HEAD_DETAIL
     REDIS_CONN.sadd("TASKEXE", CONSUMER_NAME)
+    global CONSUMER_NAME, BOOT_AT, DONE_TASKS, RETRY_TASKS, PENDING_TASKS, HEAD_CREATED_AT, HEAD_DETAIL
+    REDIS_CONN.sadd("TASKEXE", CONSUMER_NAME)
     while True:
         try:
+            now = datetime.now()
+            PENDING_TASKS = REDIS_CONN.queue_length(SVR_QUEUE_NAME)
+            if PENDING_TASKS > 0:
+                head_info = REDIS_CONN.queue_head(SVR_QUEUE_NAME)
+                if head_info is not None:
+                    seconds = int(head_info[0].split("-")[0])/1000
+                    HEAD_CREATED_AT = datetime.fromtimestamp(seconds).isoformat()
+                    HEAD_DETAIL = head_info[1]
+
+            heartbeat = json.dumps({
+                "name": CONSUMER_NAME,
+                "now": now.isoformat(),
+                "boot_at": BOOT_AT,
+                "done": DONE_TASKS,
+                "retry": RETRY_TASKS,
+                "pending": PENDING_TASKS,
+                "head_created_at": HEAD_CREATED_AT,
+                "head_detail": HEAD_DETAIL,
+            })
+            REDIS_CONN.zadd(CONSUMER_NAME, heartbeat, now.timestamp())
+            logging.info(f"{CONSUMER_NAME} reported heartbeat: {heartbeat}")
+
+            expired = REDIS_CONN.zcount(CONSUMER_NAME, 0, now.timestamp() - 60*30)
+            if expired > 0:
+                REDIS_CONN.zpopmin(CONSUMER_NAME, expired)
             now = datetime.now()
             PENDING_TASKS = REDIS_CONN.queue_length(SVR_QUEUE_NAME)
             if PENDING_TASKS > 0:
@@ -463,6 +506,9 @@ def report_status():
 
 
 if __name__ == "__main__":
+    background_thread = threading.Thread(target=report_status)
+    background_thread.daemon = True
+    background_thread.start()
     background_thread = threading.Thread(target=report_status)
     background_thread.daemon = True
     background_thread.start()
