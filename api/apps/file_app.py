@@ -35,7 +35,7 @@ from api.utils.file_utils import filename_type
 from rag.nlp import search
 from rag.utils.es_conn import ELASTICSEARCH
 from rag.utils.storage_factory import STORAGE_IMPL
-
+from api.utils.cover_wps2docx import convert_stream_to_format
 
 @manager.route('/upload', methods=['POST'])
 @login_required
@@ -97,15 +97,29 @@ def upload():
 
             # file type
             filetype = filename_type(file_obj_names[file_len - 1])
+            
+            ##add by jhq for wps covert to docx
+            blob = file_obj.read()
+            filename = file_obj_names[file_len - 1]
+            if re.search(r"\.wps$", filename, re.IGNORECASE):
+                output_format = "docx"  # 或者 "pdf"
+                blob = convert_stream_to_format(blob,output_format)
+                filename=filename.replace(".wps",'(wps).docx')
+            if re.search(r"\.xls$", filename, re.IGNORECASE):
+                output_format = "xlsx"  # 或者 "pdf"
+                blob = convert_stream_to_format(blob,output_format)
+                filename=filename.replace(".xls",'(xls).xlsx')
+            
             location = file_obj_names[file_len - 1]
             while STORAGE_IMPL.obj_exist(last_folder.id, location):
                 location += "_"
-            blob = file_obj.read()
+            # blob = file_obj.read() ,delet by jhq for wps covert to docx
             filename = duplicate_name(
                 FileService.query,
-                name=file_obj_names[file_len - 1],
+                # name=file_obj_names[file_len - 1],   delet by jhq for wps covert to docx
+                name=filename,  ##add by jhq for wps covert to docx
                 parent_id=last_folder.id)
-            file = {
+            infile = {
                 "id": get_uuid(),
                 "parent_id": last_folder.id,
                 "tenant_id": current_user.id,
@@ -115,7 +129,7 @@ def upload():
                 "location": location,
                 "size": len(blob),
             }
-            file = FileService.insert(file)
+            file = FileService.insert(infile)
             STORAGE_IMPL.put(last_folder.id, location, blob)
             file_res.append(file.to_json())
         return get_json_result(data=file_res)

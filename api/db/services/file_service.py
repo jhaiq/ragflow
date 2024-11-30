@@ -27,6 +27,7 @@ from api.db.services.document_service import DocumentService
 from api.db.services.file2document_service import File2DocumentService
 from api.utils import get_uuid
 from api.utils.file_utils import filename_type, thumbnail_img
+from api.utils.cover_wps2docx import convert_stream_to_format
 from rag.utils.storage_factory import STORAGE_IMPL
 
 
@@ -348,11 +349,22 @@ class FileService(CommonService):
                 filetype = filename_type(filename)
                 if filetype == FileType.OTHER.value:
                     raise RuntimeError("This type of file has not been supported yet!")
-
+                
+                ##add by jhq for wps covert to docx
+                blob = file.read()
+                if re.search(r"\.wps$", filename, re.IGNORECASE):
+                    output_format = "docx"  # 或者 "pdf"
+                    blob = convert_stream_to_format(blob,output_format)
+                    filename=filename.replace(".wps",'(wps).docx')
+                if re.search(r"\.xls$", filename, re.IGNORECASE):
+                    output_format = "xlsx"  # 或者 "pdf"
+                    blob = convert_stream_to_format(blob,output_format)
+                    filename=filename.replace(".xls",'(xls).xlsx')
+                    
                 location = filename
                 while STORAGE_IMPL.obj_exist(kb.id, location):
                     location += "_"
-                blob = file.read()
+                # blob = file.read() ,delet by jhq for wps covert to docx
                 STORAGE_IMPL.put(kb.id, location, blob)
 
                 doc_id = get_uuid()

@@ -415,15 +415,27 @@ def upload():
             DocumentService.query,
             name=file.filename,
             kb_id=kb_id)
+
         filetype = filename_type(filename)
         if not filetype:
             return get_data_error_result(
                 retmsg="This type of file has not been supported yet!")
 
+        ##add by jhq for wps covert to docx
+        blob = file.read()
+        if re.search(r"\.wps$", filename, re.IGNORECASE):
+            output_format = "docx"  # 或者 "pdf"
+            blob = convert_stream_to_format(blob,output_format)
+            filename=filename.replace(".wps",'(wps).docx')
+        if re.search(r"\.xls$", filename, re.IGNORECASE):
+            output_format = "xlsx"  # 或者 "pdf"
+            blob = convert_stream_to_format(blob,output_format)
+            filename=filename.replace(".xls",'(xls).xlsx')
+
         location = filename
         while STORAGE_IMPL.obj_exist(kb_id, location):
             location += "_"
-        blob = request.files['file'].read()
+        # blob = request.files['file'].read() ,delet by jhq for wps covert to docx
         STORAGE_IMPL.put(kb_id, location, blob)
         doc = {
             "id": get_uuid(),
